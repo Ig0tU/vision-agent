@@ -9,6 +9,12 @@ from .models import (
     ModelName,
     ModelRegistry,
 )
+from .openai.messages_api import OpenAiMessagesApi
+from .openai.models import OpenAiModel
+from .openai.settings import (
+    OpenAiChatCompletionsCreateSettings,
+    OpenAiModelSettings,
+)
 from .openrouter.model import OpenRouterModel
 from .openrouter.settings import ChatCompletionsCreateSettings, OpenRouterSettings
 from .shared.agent_message_param import (
@@ -50,6 +56,10 @@ __all__ = [
     "ModelRegistry",
     "OnMessageCb",
     "OnMessageCbParam",
+    "OpenAiChatCompletionsCreateSettings",
+    "OpenAiMessagesApi",
+    "OpenAiModel",
+    "OpenAiModelSettings",
     "OpenRouterModel",
     "OpenRouterSettings",
     "Point",

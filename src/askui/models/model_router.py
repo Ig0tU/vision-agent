@@ -39,6 +39,9 @@ from askui.utils.image_utils import ImageSource
 from askui.utils.source_utils import Source
 
 from .askui.inference_api import AskUiInferenceApi
+from .openai.messages_api import OpenAiMessagesApi
+from .openai.models import OpenAiModel
+from .openai.settings import OpenAiModelSettings
 from .ui_tars_ep.ui_tars_api import UiTarsApiHandler, UiTarsApiHandlerSettings
 
 logger = logging.getLogger(__name__)
@@ -124,6 +127,34 @@ def initialize_default_model_registry(  # noqa: C901
         )
 
     @functools.cache
+    def openai_facade(
+        api_key: str | None = None, base_url: str | None = None
+    ) -> ModelFacade:
+        from openai import OpenAI
+
+        settings = OpenAiModelSettings()
+        client = OpenAI(
+            api_key=api_key
+            or (settings.api_key.get_secret_value() if settings.api_key else None),
+            base_url=base_url or str(settings.base_url),
+        )
+        messages_api = OpenAiMessagesApi(client=client)
+        act_model = Agent(
+            messages_api=messages_api,
+            reporter=reporter,
+        )
+        model = OpenAiModel(
+            settings=settings,
+            messages_api=messages_api,
+            locator_serializer=vlm_locator_serializer(),
+        )
+        return ModelFacade(
+            act_model=act_model,
+            get_model=model,
+            locate_model=model,
+        )
+
+    @functools.cache
     def tars_handler() -> UiTarsApiHandler:
         try:
             settings = UiTarsApiHandlerSettings()
@@ -156,6 +187,10 @@ def initialize_default_model_registry(  # noqa: C901
         "askui/": askui_facade,
         "bedrock/": lambda: anthropic_facade("bedrock"),
         "vertex/": lambda: anthropic_facade("vertex"),
+        "openai/": openai_facade,
+        "ollama/": lambda: openai_facade(
+            api_key="ollama", base_url="http://localhost:11434/v1"
+        ),
     }
 
 
