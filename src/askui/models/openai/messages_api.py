@@ -1,5 +1,5 @@
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from anthropic import Omit
@@ -123,9 +123,9 @@ class OpenAiMessagesApi(MessagesApi):
             {
                 "type": "function",
                 "function": {
-                    "name": tool["name"],  # type: ignore
-                    "description": tool["description"],  # type: ignore
-                    "parameters": tool["input_schema"],  # type: ignore
+                    "name": cast(Any, tool)["name"],
+                    "description": cast(Any, tool)["description"],
+                    "parameters": cast(Any, tool)["input_schema"],
                 },
             }
             for tool in tools.to_params()
