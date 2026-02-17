@@ -1,14 +1,14 @@
 import json
-from typing import Any, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from openai import OpenAI
     from anthropic import Omit
     from anthropic.types import AnthropicBetaParam
     from anthropic.types.beta import (
         BetaThinkingConfigParam,
         BetaToolChoiceParam,
     )
+    from openai import OpenAI
 
 from typing_extensions import override
 
@@ -22,7 +22,9 @@ from askui.models.shared.agent_message_param import (
 )
 from askui.models.shared.messages_api import MessagesApi
 from askui.models.shared.prompts import SystemPrompt
-from askui.models.shared.tools import ToolCollection
+
+if TYPE_CHECKING:
+    from askui.models.shared.tools import ToolCollection
 
 
 class OpenAiMessagesApi(MessagesApi):
@@ -32,18 +34,22 @@ class OpenAiMessagesApi(MessagesApi):
     ) -> None:
         self._client = client
 
+    @property
+    def client(self) -> "OpenAI":
+        return self._client
+
     @override
     def create_message(
         self,
         messages: list[MessageParam],
         model: str,
-        tools: "ToolCollection | Omit" = None, # type: ignore
-        max_tokens: "int | Omit" = None, # type: ignore
-        betas: "list[AnthropicBetaParam] | Omit" = None, # type: ignore
+        tools: "ToolCollection | Omit" = None,  # type: ignore
+        max_tokens: "int | Omit" = None,  # type: ignore
+        betas: "list[AnthropicBetaParam] | Omit" = None,  # type: ignore
         system: SystemPrompt | None = None,
-        thinking: "BetaThinkingConfigParam | Omit" = None, # type: ignore
-        tool_choice: "BetaToolChoiceParam | Omit" = None, # type: ignore
-        temperature: "float | Omit" = None, # type: ignore
+        thinking: "BetaThinkingConfigParam | Omit" = None,  # type: ignore
+        tool_choice: "BetaToolChoiceParam | Omit" = None,  # type: ignore
+        temperature: "float | Omit" = None,  # type: ignore
     ) -> MessageParam:
         from anthropic import Omit, omit
 
@@ -90,9 +96,11 @@ class OpenAiMessagesApi(MessagesApi):
 
         response = self._client.chat.completions.create(
             model=model,
-            messages=openai_messages, # type: ignore
-            tools=openai_tools if not isinstance(openai_tools, Omit) else None, # type: ignore
-            tool_choice=openai_tool_choice if not isinstance(openai_tools, Omit) else None, # type: ignore
+            messages=openai_messages,  # type: ignore
+            tools=openai_tools if not isinstance(openai_tools, Omit) else None,  # type: ignore
+            tool_choice=openai_tool_choice
+            if not isinstance(openai_tools, Omit)
+            else None,  # type: ignore
             max_tokens=_max_tokens if not isinstance(_max_tokens, Omit) else None,
             temperature=_temperature if not isinstance(_temperature, Omit) else 0.0,
         )
@@ -105,14 +113,14 @@ class OpenAiMessagesApi(MessagesApi):
             content.append(TextBlockParam(text=response_message.content))
 
         if response_message.tool_calls:
-            for tool_call in response_message.tool_calls:
-                content.append(
-                    ToolUseBlockParam(
-                        id=tool_call.id,
-                        name=tool_call.function.name,
-                        input=json.loads(tool_call.function.arguments),
-                    )
+            content.extend(
+                ToolUseBlockParam(
+                    id=tool_call.id,
+                    name=tool_call.function.name,
+                    input=json.loads(tool_call.function.arguments),
                 )
+                for tool_call in response_message.tool_calls
+            )
 
         stop_reason_map = {
             "stop": "end_turn",
@@ -124,84 +132,91 @@ class OpenAiMessagesApi(MessagesApi):
         return MessageParam(
             role="assistant",
             content=content,
-            stop_reason=stop_reason_map.get(choice.finish_reason, "end_turn"), # type: ignore
+            stop_reason=stop_reason_map.get(choice.finish_reason, "end_turn"),  # type: ignore
         )
 
     def _transform_messages(self, messages: list[MessageParam]) -> list[dict[str, Any]]:
         transformed: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "assistant":
-                content_text = ""
-                tool_calls = []
-                if isinstance(msg.content, str):
-                    content_text = msg.content
-                else:
-                    for block in msg.content:
-                        if isinstance(block, TextBlockParam):
-                            content_text += block.text
-                        elif isinstance(block, ToolUseBlockParam):
-                            tool_calls.append({
-                                "id": block.id,
-                                "type": "function",
-                                "function": {
-                                    "name": block.name,
-                                    "arguments": json.dumps(block.input)
-                                }
-                            })
-
-                msg_dict = {"role": "assistant", "content": content_text or None}
-                if tool_calls:
-                    msg_dict["tool_calls"] = tool_calls
-                transformed.append(msg_dict)
-
+                transformed.append(self._transform_assistant_message(msg))
             elif msg.role == "user":
-                if isinstance(msg.content, str):
-                    transformed.append({"role": "user", "content": msg.content})
-                else:
-                    # Check if it's a tool result message
-                    tool_results = [b for b in msg.content if isinstance(b, ToolResultBlockParam)]
-                    if tool_results and len(tool_results) == len(msg.content):
-                        for result in tool_results:
-                            content = ""
-                            if isinstance(result.content, str):
-                                content = result.content
-                            else:
-                                for block in result.content:
-                                    if isinstance(block, TextBlockParam):
-                                        content += block.text
-
-                            transformed.append({
-                                "role": "tool",
-                                "tool_call_id": result.tool_use_id,
-                                "content": content
-                            })
-                    else:
-                        # Regular multimodal user message
-                        content_list = []
-                        for block in msg.content:
-                            if isinstance(block, TextBlockParam):
-                                content_list.append({"type": "text", "text": block.text})
-                            elif isinstance(block, ImageBlockParam):
-                                if hasattr(block.source, "data"): # Base64
-                                    content_list.append({
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:{block.source.media_type};base64,{block.source.data}"
-                                        }
-                                    })
-                                else: # URL
-                                    content_list.append({
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": block.source.url
-                                        }
-                                    })
-                            elif isinstance(block, ToolResultBlockParam):
-                                transformed.append({
-                                    "role": "tool",
-                                    "tool_call_id": block.tool_use_id,
-                                    "content": str(block.content)
-                                })
-                        if content_list:
-                            transformed.append({"role": "user", "content": content_list})
+                transformed.extend(self._transform_user_message(msg))
         return transformed
+
+    def _transform_assistant_message(self, msg: MessageParam) -> dict[str, Any]:
+        content_text = ""
+        tool_calls = []
+        if isinstance(msg.content, str):
+            content_text = msg.content
+        else:
+            for block in msg.content:
+                if isinstance(block, TextBlockParam):
+                    content_text += block.text
+                elif isinstance(block, ToolUseBlockParam):
+                    tool_calls.append(
+                        {
+                            "id": block.id,
+                            "type": "function",
+                            "function": {
+                                "name": block.name,
+                                "arguments": json.dumps(block.input),
+                            },
+                        }
+                    )
+
+        msg_dict: dict[str, Any] = {
+            "role": "assistant",
+            "content": content_text or None,
+        }
+        if tool_calls:
+            msg_dict["tool_calls"] = tool_calls
+        return msg_dict
+
+    def _transform_user_message(self, msg: MessageParam) -> list[dict[str, Any]]:
+        if isinstance(msg.content, str):
+            return [{"role": "user", "content": msg.content}]
+
+        # Check if it's a tool result message
+        tool_results = [b for b in msg.content if isinstance(b, ToolResultBlockParam)]
+        if tool_results and len(tool_results) == len(msg.content):
+            return [self._transform_tool_result(result) for result in tool_results]
+
+        # Regular multimodal user message
+        content_list = []
+        transformed: list[dict[str, Any]] = []
+        for block in msg.content:
+            if isinstance(block, TextBlockParam):
+                content_list.append({"type": "text", "text": block.text})
+            elif isinstance(block, ImageBlockParam):
+                content_list.append(self._transform_image_block(block))
+            elif isinstance(block, ToolResultBlockParam):
+                transformed.append(self._transform_tool_result(block))
+
+        if content_list:
+            transformed.insert(0, {"role": "user", "content": content_list})
+        return transformed
+
+    def _transform_tool_result(self, result: ToolResultBlockParam) -> dict[str, Any]:
+        content = ""
+        if isinstance(result.content, str):
+            content = result.content
+        else:
+            for block in result.content:
+                if isinstance(block, TextBlockParam):
+                    content += block.text
+        return {
+            "role": "tool",
+            "tool_call_id": result.tool_use_id,
+            "content": content,
+        }
+
+    def _transform_image_block(self, block: ImageBlockParam) -> dict[str, Any]:
+        if hasattr(block.source, "data"):  # Base64
+            url = f"data:{block.source.media_type};base64,{block.source.data}"
+        else:  # URL
+            url = block.source.url
+        return {
+            "type": "image_url",
+            "image_url": {"url": url},
+        }

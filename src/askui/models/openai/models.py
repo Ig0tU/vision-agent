@@ -34,6 +34,7 @@ from askui.utils.image_utils import (
 )
 from askui.utils.pdf_utils import PdfSource
 from askui.utils.source_utils import Source
+
 from .messages_api import OpenAiMessagesApi
 from .settings import OpenAiModelSettings
 
@@ -124,6 +125,7 @@ class OpenAiModel(GetModel, LocateModel):
         schema = _response_schema.model_json_schema()
         # Clean schema refs if needed, similar to OpenRouterModel
         from askui.models.openrouter.model import _clean_schema_refs
+
         _clean_schema_refs(schema)
 
         defs = schema.pop("$defs", None)
@@ -152,33 +154,35 @@ class OpenAiModel(GetModel, LocateModel):
                 "content": [
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{media_type};base64,{image_data}"
-                        }
+                        "image_url": {"url": f"data:{media_type};base64,{image_data}"},
                     },
-                    {"type": "text", "text": prompt}
-                ]
-            }
+                    {"type": "text", "text": prompt},
+                ],
+            },
         ]
 
-        response = self._messages_api._client.chat.completions.create(
+        response = self._messages_api.client.chat.completions.create(
             model=model,
-            messages=openai_messages, # type: ignore
-            response_format=response_format, # type: ignore
+            messages=openai_messages,  # type: ignore
+            response_format=response_format,  # type: ignore
         )
 
         model_response = response.choices[0].message.content
         if model_response is None:
-            raise QueryNoResponseError("No response from OpenAI", prompt)
+            msg = "No response from OpenAI"
+            raise QueryNoResponseError(msg, prompt)
 
         try:
             response_json = json.loads(model_response)
             validated_response = _response_schema.model_validate(
                 response_json["response"]
             )
-            return validated_response.root
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            raise QueryUnexpectedResponseError(str(e), prompt, [TextBlockParam(text=model_response)]) from e
+            raise QueryUnexpectedResponseError(
+                str(e), prompt, [TextBlockParam(text=model_response)]
+            ) from e
+        else:
+            return validated_response.root
 
     @override
     def locate(
@@ -210,7 +214,7 @@ class OpenAiModel(GetModel, LocateModel):
             )
             return [
                 scale_coordinates(
-                    extract_click_coordinates(cast(str, content)),
+                    extract_click_coordinates(cast("str", content)),
                     image.root.size,
                     resolution,
                     inverse=True,

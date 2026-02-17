@@ -134,7 +134,8 @@ def initialize_default_model_registry(  # noqa: C901
 
         settings = OpenAiModelSettings()
         client = OpenAI(
-            api_key=api_key or (settings.api_key.get_secret_value() if settings.api_key else None),
+            api_key=api_key
+            or (settings.api_key.get_secret_value() if settings.api_key else None),
             base_url=base_url or str(settings.base_url),
         )
         messages_api = OpenAiMessagesApi(client=client)
