@@ -43,6 +43,7 @@ class ModelName:
     HF__SPACES__QWEN__QWEN2_VL_7B_INSTRUCT = "Qwen/Qwen2-VL-7B-Instruct"
     HF__SPACES__SHOWUI__2B = "showlab/ShowUI-2B"
     TARS = "tars"
+    GPT_4O = "gpt-4o"
 
 
 MODEL_DEFINITION_PROPERTY_REGEX_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")

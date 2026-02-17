@@ -9,7 +9,7 @@ This guide covers all the AI models available in AskUI Python SDK, their capabil
 - [When to select a different model](#when-to-select-a-different-model)
 - [How to select a model](#how-to-select-a-model)
 - [AskUI models](#askui-models)
-- [Other models and providers: Anthropic, OpenRouter, Huggingface, UI-TARS](#other-models-and-providers-anthropic-openrouter-huggingface-ui-tars)
+- [Other models and providers: Anthropic, OpenAI, OpenRouter, Huggingface, UI-TARS](#other-models-and-providers-anthropic-openai-openrouter-huggingface-ui-tars)
 - [Your own custom models](#your-own-custom-models)
 - [Model providers](#model-providers)
 
@@ -75,9 +75,44 @@ export ASKUI_WORKSPACE_ID=<your-workspace-id-here>
 export ASKUI_TOKEN=<your-token-here>
 ```
 
-## Other models and providers: Anthropic, OpenRouter, Huggingface, UI-TARS
+## Other models and providers: Anthropic, OpenAI, OpenRouter, Huggingface, UI-TARS
 
 **Note:** These models rely on community support and may have varying levels of integration. We welcome and appreciate community contributions to improve their support!
+
+### OpenAI
+
+OpenAI provider allows you to use models hosted by OpenAI or any OpenAI-compatible API, including local models like Ollama, LocalAI, or vLLM.
+
+#### Model Card
+
+| Model Name | Strengths | Execution Speed | Reliability |
+|------------|-----------|----------------|-------------|
+| `gpt-4o` | Excellent for complex reasoning and vision tasks | Fast, <1s per step | **High** - stable |
+| `gpt-4o-mini` | Cost-effective and fast | Very Fast, <500ms per step | **High** - stable |
+| `llama-3.2-vision` (via Ollama) | Local, private, and open-source | Varies by hardware | **Medium** |
+
+#### Configuration
+
+**Environment Variables:**
+```shell
+export OPENAI_API_KEY=<your-api-key-here>
+export OPENAI_BASE_URL=<your-base-url>  # Optional, defaults to "https://api.openai.com/v1"
+```
+
+**Example Usage:**
+```python
+from askui import VisionAgent
+
+# Use OpenAI's gpt-4o
+with VisionAgent(model="openai/gpt-4o") as agent:
+    agent.click("Submit")
+
+# Use a local model via Ollama
+with VisionAgent(model="ollama/llama3.2-vision:11b") as agent:
+    agent.get("What is on the screen?")
+```
+
+**Note:** For Ollama, the SDK automatically points to `http://localhost:11434/v1` when using the `ollama/` prefix.
 
 ### Anthropic
 
