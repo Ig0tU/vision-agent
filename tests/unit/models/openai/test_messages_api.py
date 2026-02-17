@@ -19,17 +19,17 @@ from askui.utils.image_utils import ImageSource
 
 
 @pytest.fixture
-def mock_openai_client():
+def mock_openai_client() -> MagicMock:
     return MagicMock()
 
 
 @pytest.fixture
-def messages_api(mock_openai_client):
+def messages_api(mock_openai_client: MagicMock) -> OpenAiMessagesApi:
     return OpenAiMessagesApi(client=mock_openai_client)
 
 
 @pytest.fixture
-def model(messages_api):
+def model(messages_api: OpenAiMessagesApi) -> OpenAiModel:
     settings = OpenAiModelSettings()
     locator_serializer = VlmLocatorSerializer()
     return OpenAiModel(
@@ -39,7 +39,7 @@ def model(messages_api):
     )
 
 
-def test_transform_simple_text_message(messages_api):
+def test_transform_simple_text_message(messages_api: OpenAiMessagesApi) -> None:
     messages = [
         MessageParam(role="user", content="Hello"),
         MessageParam(role="assistant", content="Hi there"),
@@ -51,7 +51,7 @@ def test_transform_simple_text_message(messages_api):
     ]
 
 
-def test_transform_multimodal_message(messages_api):
+def test_transform_multimodal_message(messages_api: OpenAiMessagesApi) -> None:
     messages = [
         MessageParam(
             role="user",
@@ -80,7 +80,7 @@ def test_transform_multimodal_message(messages_api):
     ]
 
 
-def test_transform_tool_use_message(messages_api):
+def test_transform_tool_use_message(messages_api: OpenAiMessagesApi) -> None:
     messages = [
         MessageParam(
             role="assistant",
@@ -111,7 +111,7 @@ def test_transform_tool_use_message(messages_api):
     ]
 
 
-def test_transform_tool_result_message(messages_api):
+def test_transform_tool_result_message(messages_api: OpenAiMessagesApi) -> None:
     messages = [
         MessageParam(
             role="user",
@@ -124,7 +124,9 @@ def test_transform_tool_result_message(messages_api):
     ]
 
 
-def test_create_message(messages_api, mock_openai_client):
+def test_create_message(
+    messages_api: OpenAiMessagesApi, mock_openai_client: MagicMock
+) -> None:
     mock_response = MagicMock()
     mock_choice = MagicMock()
     mock_choice.message.content = "The weather is nice."
@@ -137,12 +139,14 @@ def test_create_message(messages_api, mock_openai_client):
     response = messages_api.create_message(messages, model="gpt-4o")
 
     assert response.role == "assistant"
-    assert response.content[0].text == "The weather is nice."
+    first_block = response.content[0]
+    assert isinstance(first_block, TextBlockParam)
+    assert first_block.text == "The weather is nice."
     assert response.stop_reason == "end_turn"
     mock_openai_client.chat.completions.create.assert_called_once()
 
 
-def test_model_get(model, mock_openai_client):
+def test_model_get(model: OpenAiModel, mock_openai_client: MagicMock) -> None:
     mock_response = MagicMock()
     mock_choice = MagicMock()
     mock_choice.message.content = "The image shows a cat."
@@ -162,7 +166,7 @@ def test_model_get(model, mock_openai_client):
     mock_openai_client.chat.completions.create.assert_called_once()
 
 
-def test_model_locate(model, mock_openai_client):
+def test_model_locate(model: OpenAiModel, mock_openai_client: MagicMock) -> None:
     mock_response = MagicMock()
     mock_choice = MagicMock()
     mock_choice.message.content = "<click>500,400</click>"
@@ -187,7 +191,9 @@ def test_model_locate(model, mock_openai_client):
     mock_openai_client.chat.completions.create.assert_called_once()
 
 
-def test_model_get_with_schema(model, mock_openai_client):
+def test_model_get_with_schema(
+    model: OpenAiModel, mock_openai_client: MagicMock
+) -> None:
     from askui.models.types.response_schemas import ResponseSchemaBase
 
     mock_response = MagicMock()
@@ -208,6 +214,7 @@ def test_model_get_with_schema(model, mock_openai_client):
         "What is in the image?", source, response_schema=CatSchema, model="gpt-4o"
     )
 
+    assert isinstance(result, CatSchema)
     assert result.name == "cat"
     mock_openai_client.chat.completions.create.assert_called_once()
     args, kwargs = mock_openai_client.chat.completions.create.call_args

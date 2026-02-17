@@ -161,10 +161,10 @@ class OpenAiModel(GetModel, LocateModel):
             },
         ]
 
-        response = self._messages_api.client.chat.completions.create(
+        response = self._messages_api.client.chat.completions.create(  # type: ignore[call-overload]
             model=model,
-            messages=openai_messages,  # type: ignore
-            response_format=response_format,  # type: ignore
+            messages=openai_messages,
+            response_format=response_format,
         )
 
         model_response = response.choices[0].message.content
@@ -214,7 +214,7 @@ class OpenAiModel(GetModel, LocateModel):
             )
             return [
                 scale_coordinates(
-                    extract_click_coordinates(cast("str", content)),
+                    extract_click_coordinates(content),
                     image.root.size,
                     resolution,
                     inverse=True,

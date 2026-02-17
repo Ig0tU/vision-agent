@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from typing_extensions import override
 
 from askui.models.shared.agent_message_param import (
+    Base64ImageSourceParam,
     ContentBlockParam,
     ImageBlockParam,
     MessageParam,
@@ -67,40 +68,14 @@ class OpenAiMessagesApi(MessagesApi):
         if _system:
             openai_messages.insert(0, {"role": "system", "content": _system})
 
-        openai_tools = omit
-        if not isinstance(_tools, Omit):
-            openai_tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool["input_schema"],
-                    },
-                }
-                for tool in _tools.to_params()
-            ]
-
-        # Map tool_choice
-        openai_tool_choice = "auto"
-        if not isinstance(_tool_choice, Omit):
-            if _tool_choice["type"] == "any":
-                openai_tool_choice = "required"
-            elif _tool_choice["type"] == "tool":
-                openai_tool_choice = {
-                    "type": "function",
-                    "function": {"name": _tool_choice["name"]},
-                }
-            elif _tool_choice["type"] == "auto":
-                openai_tool_choice = "auto"
+        openai_tools = self._build_openai_tools(_tools)
+        openai_tool_choice = self._build_openai_tool_choice(_tool_choice)
 
         response = self._client.chat.completions.create(
             model=model,
-            messages=openai_messages,  # type: ignore
-            tools=openai_tools if not isinstance(openai_tools, Omit) else None,  # type: ignore
-            tool_choice=openai_tool_choice
-            if not isinstance(openai_tools, Omit)
-            else None,  # type: ignore
+            messages=openai_messages,  # type: ignore[arg-type]
+            tools=openai_tools,  # type: ignore[arg-type]
+            tool_choice=openai_tool_choice if openai_tools else None,  # type: ignore[arg-type]
             max_tokens=_max_tokens if not isinstance(_max_tokens, Omit) else None,
             temperature=_temperature if not isinstance(_temperature, Omit) else 0.0,
         )
@@ -120,6 +95,7 @@ class OpenAiMessagesApi(MessagesApi):
                     input=json.loads(tool_call.function.arguments),
                 )
                 for tool_call in response_message.tool_calls
+                if tool_call.type == "function"
             )
 
         stop_reason_map = {
@@ -132,8 +108,48 @@ class OpenAiMessagesApi(MessagesApi):
         return MessageParam(
             role="assistant",
             content=content,
-            stop_reason=stop_reason_map.get(choice.finish_reason, "end_turn"),  # type: ignore
+            stop_reason=stop_reason_map.get(choice.finish_reason, "end_turn"),
         )
+
+    def _build_openai_tools(
+        self, tools: "ToolCollection | Omit"
+    ) -> list[dict[str, Any]] | None:
+        from anthropic import Omit
+
+        if isinstance(tools, Omit):
+            return None
+
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],  # type: ignore
+                    "description": tool["description"],  # type: ignore
+                    "parameters": tool["input_schema"],  # type: ignore
+                },
+            }
+            for tool in tools.to_params()
+            if all(key in tool for key in ["name", "description", "input_schema"])
+        ]
+
+    def _build_openai_tool_choice(
+        self, tool_choice: "BetaToolChoiceParam | Omit"
+    ) -> Any:
+        from anthropic import Omit
+
+        if isinstance(tool_choice, Omit):
+            return "auto"
+
+        if tool_choice["type"] == "any":
+            return "required"
+        if tool_choice["type"] == "tool":
+            return {
+                "type": "function",
+                "function": {"name": tool_choice["name"]},
+            }
+        if tool_choice["type"] == "auto":
+            return "auto"
+        return "auto"
 
     def _transform_messages(self, messages: list[MessageParam]) -> list[dict[str, Any]]:
         transformed: list[dict[str, Any]] = []
@@ -212,7 +228,7 @@ class OpenAiMessagesApi(MessagesApi):
         }
 
     def _transform_image_block(self, block: ImageBlockParam) -> dict[str, Any]:
-        if hasattr(block.source, "data"):  # Base64
+        if isinstance(block.source, Base64ImageSourceParam):
             url = f"data:{block.source.media_type};base64,{block.source.data}"
         else:  # URL
             url = block.source.url
